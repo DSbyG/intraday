@@ -57,7 +57,7 @@ def calculate_stop_loss(deposit, trade_size, stop_loss_percent):
     loss = (stop_loss_percent / 100) * trade_size
     return max(deposit - loss, 0)
 
-# Функция для валидации процентных значений тейк-профитов
+# Функция для валидации только **суммы процентов закрытия позиций** (sell_percent)
 def validate_take_profits(take_profits):
     total_sell_percent = sum(tp["sell_percent"] for tp in take_profits)
     if total_sell_percent > 100:
@@ -71,7 +71,7 @@ def main():
     st.markdown('<div class="header-title">Калькулятор тейк-профитов и стоп-лосса</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="sub-header">📊 Ввод параметров сделки</div>', unsafe_allow_html=True)
-    with st.expander("Введите данные сделки 💼"):  # Исправлено на st.expander
+    with st.expander("Введите данные сделки 💼"):
         trade_size = st.number_input("Сумма сделки ($)", value=5000, min_value=1000, step=100)
         deposit = st.number_input("Ваш депозит ($)", value=1000, min_value=100)
         stop_loss_percent = st.number_input("Процент для стоп-лосса (%)", min_value=0.1, max_value=50.0, value=1.48, step=0.1)
@@ -82,11 +82,14 @@ def main():
     take_profits = []
     st.markdown('<div class="box">', unsafe_allow_html=True)
     for i in range(num_take_profits):
-        take_profit_percent = st.number_input(f"Процент до {i + 1}-го тейк-профита", min_value=0.1, max_value=100.0, value=1.67 + i, step=0.1, key=f"tp_percent_{i}")
+        # Процент роста цены может быть любым значением
+        take_profit_percent = st.number_input(f"Процент до {i + 1}-го тейк-профита", min_value=0.1, max_value=1000.0, value=1.67 + i, step=0.1, key=f"tp_percent_{i}")
+        # Проверяем только процент закрытия позиций (sell_percent), он должен быть <= 100%
         sell_percent = st.number_input(f"Процент закрытия на {i + 1}-м тейк-профите", min_value=1.0, max_value=100.0, value=20.0 if i < 3 else 10.0, step=1.0, key=f"tp_sell_{i}")
         take_profits.append({"take_profit_percent": take_profit_percent, "sell_percent": sell_percent})
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # Проверяем только сумму закрытых позиций
     is_valid, error_message = validate_take_profits(take_profits)
     if not is_valid:
         st.markdown(f'<div class="error-box">{error_message}</div>', unsafe_allow_html=True)
@@ -104,8 +107,26 @@ def main():
     st.table(results)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # Рассчитываем остаток на депозите после стоп-лосса
     deposit_after_stop_loss = calculate_stop_loss(deposit, trade_size, stop_loss_percent)
     st.markdown(f'<div class="success-box">После срабатывания стоп-лосса, если цена снизится на {stop_loss_percent}%, ваш депозит будет равен: ${deposit_after_stop_loss:.2f}</div>', unsafe_allow_html=True)
+
+    # Рассчитываем RISK (убыток) и REWARD (прибыль)
+    final_deposit_after_last_take = current_deposit  # Депозит после последнего тейк-профита
+    risk = deposit - deposit_after_stop_loss  # Risk
+    reward = final_deposit_after_last_take - deposit  # Reward
+
+    # Проверяем, что RISK и REWARD не равны 0, чтобы избежать деления на 0
+    if risk > 0:
+        risk_reward_ratio = reward / risk if reward != 0 else float('inf')
+    else:
+        risk_reward_ratio = "Невозможно рассчитать (нет риска)"
+
+    # Отображаем RISK/REWARD метрику
+    st.markdown(f'<div class="sub-header">📈 Метрика Risk/Reward</div>', unsafe_allow_html=True)
+    st.write(f"Risk (убыток): ${risk:.2f}")
+    st.write(f"Reward (прибыль): ${reward:.2f}")
+    st.write(f"Отношение Risk/Reward: {risk_reward_ratio:.2f}")
 
 if __name__ == "__main__":
     main()
